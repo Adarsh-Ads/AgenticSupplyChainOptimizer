@@ -1,0 +1,15 @@
+# Credentials
+.env
+
+# Environments
+venv/
+__pycache__/
+*.pyc
+
+# Data & Databases
+data/inventory.db
+data/agent_log.txt
+
+# OS Files
+.DS_Store
+Thumbs.db
