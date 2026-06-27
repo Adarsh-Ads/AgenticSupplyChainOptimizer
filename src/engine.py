@@ -1,105 +1,65 @@
-import os
-import sqlite3
-import pandas as pd
-import xgboost as xgb
-from dotenv import load_dotenv
+import traceback
 from agno.agent import Agent
 from agno.models.groq import Groq
-from agent_tools import get_supplier_details, update_inventory_status  
-
+import sqlite3
+import os
+from dotenv import load_dotenv
+from src.agent_tools import get_supplier_details
 
 load_dotenv()
 DB_PATH = os.getenv("DB_PATH", "data/inventory.db")
 
+def forecast_stock_risk(product_id: str, est_days_left: float, target_days: float):
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        product = conn.execute("SELECT * FROM products WHERE product_id = ?", (product_id,)).fetchone()
+        conn.close()
 
-# UPDATED: The Intelligent Agent for Agno 1.0+
-agent = Agent(
-    model=Groq(id="llama-3.3-70b-versatile"),
-    tools=[get_supplier_details, update_inventory_status],
-    description="You are a Supply Chain Manager.",
-    instructions=[
-        "1. Identify the product ID and name from the input.",
-        "2. Call get_supplier_details to find the supplier email.",
-        "3. Draft a professional restock email.",
-        "4. Call update_inventory_status to log the draft creation."
-    ],
-    markdown=True,
-)
+        if not product:
+            return {"analysis": "START_ANALYSIS\nError: Product not found.\nEND_OUTPUT"}
 
-def forecast_stock_risk(product_id):
-    if not os.path.exists(DB_PATH):
-        print(f"❌ Error: Database not found at {DB_PATH}. Run database.py first!")
-        return
+        units_needed = max(0, (target_days - est_days_left) * 50)
 
-    conn = sqlite3.connect(DB_PATH)
-    
-    # Fetch sales history
-    query = f"SELECT units_sold FROM sales_history WHERE product_id='{product_id}'"
-    df = pd.read_sql(query, conn)
-    
-    if len(df) < 5:
-        print(f"ℹ️ Insufficient data for Product {product_id} to forecast.")
-        return
+        # Pre-fetch the supplier information programmatically
+        supplier_info = get_supplier_details(product_id)
+        if isinstance(supplier_info, dict):
+            supplier_name = supplier_info.get("supplier_name", "General Supplier")
+            supplier_email = supplier_info.get("supplier_email", "orders@supply-chain.com")
+        else:
+            supplier_name = "General Supplier"
+            supplier_email = "orders@supply-chain.com"
 
-    # XGBoost Forecasting (Predicting burn rate)
-    df['lag_1'] = df['units_sold'].shift(1)
-    train_df = df.dropna()
-    
-    model = xgb.XGBRegressor(objective='reg:squarederror', n_estimators=50)
-    model.fit(train_df[['lag_1']], train_df['units_sold'])
+        if not os.getenv("GROQ_API_KEY"):
+            print("❌ CRITICAL ERROR: GROQ_API_KEY is missing from environment variables.")
+            return {"analysis": "START_ANALYSIS\nConfiguration Error: Backend API Key is missing.\nEND_OUTPUT"}
 
-    last_sale = df['units_sold'].iloc[-1].reshape(-1, 1)
-    predicted_daily_sales = model.predict(pd.DataFrame(last_sale, columns=['lag_1']))[0]
-    
-    # Get current stock levels
-    stock_info = conn.execute(
-        f"SELECT current_stock, product_name FROM products WHERE product_id='{product_id}'"
-    ).fetchone()
-    
-    current_stock, product_name = stock_info[0], stock_info[1]
-    days_left = current_stock / max(predicted_daily_sales, 0.1)
+        # FIXED: temperature goes inside Groq(), NOT Agent()
+        agent = Agent(
+            model=Groq(id="llama-3.3-70b-versatile", temperature=0.0),
+            instructions=[
+                "You are a strict data formatting script. You must output exactly according to the template markers.",
+                "Do not include conversational introductions, conclusions, or markdown code blocks around the markers.",
+                "",
+                "START_ANALYSIS",
+                f"To reach your {target_days:.1f}-day buffer, an order of {units_needed:.0f} units is required.",
+                "",
+                f"If the order volume ({units_needed:.0f}) is greater than 0, append this exact block next:",
+                "START_EMAIL",
+                f"Subject: Immediate Procurement Order Request - {product_id}",
+                f"Dear {supplier_name},",
+                f"Please process an immediate warehouse dispatch order for {units_needed:.0f} units of Product ID: {product_id}.",
+                f"Kindly confirm receipt and dispatch configurations to {supplier_email}.",
+                "Best Regards,",
+                "Automated Procurement Engine",
+                "END_OUTPUT"
+            ]
+        )
 
-    # Agentic Trigger
-    if days_left < 10: # Alerting if less than 10 days left
-        print(f"⚠️ ALERT: {product_name} running low ({days_left:.1f} days left).")
-        
-        prompt = f"""
-        INVENTORY ALERT:
-        Product: {product_name}
-        Stock Level: {current_stock}
-        Predicted Daily Sales: {predicted_daily_sales:.2f}
-        Days until empty: {days_left:.1f}
-        
-        Task: Draft a professional restock email to 'Global Inventory Corp'. 
-        Mention the data-driven forecast and request a quote for 500 units.
-        """
-        agent.print_response(prompt)
-    else:
-        print(f"✅ {product_name} stock is stable. Estimated {days_left:.1f} days remaining.")
+        response = agent.run(f"Process schema for {product_id}")
+        return {"analysis": response.content}
 
-    conn.close()
-
-if __name__ == "__main__":
-    # Connect to find a product that actually has data
-    conn = sqlite3.connect(DB_PATH)
-    
-    # Query to find products with at least 5 rows of sales history
-    valid_products = pd.read_sql("""
-        SELECT product_id, COUNT(*) as record_count 
-        FROM sales_history 
-        GROUP BY product_id 
-        HAVING record_count >= 5 
-        ORDER BY record_count DESC 
-        LIMIT 1
-    """, conn)
-    
-    conn.close()
-
-    if not valid_products.empty:
-        best_id = valid_products['product_id'].iloc[0]
-        records = valid_products['record_count'].iloc[0]
-        print(f"📈 Found Product {best_id} with {records} data points. Running forecast...")
-        forecast_stock_risk(best_id)
-    else:
-        print("❌ No products found with enough history (min 5 rows).")
-        print("💡 Suggestion: Check your CSV to see if products have multiple dates of sales.")
+    except Exception as e:
+        print("\n❌ BACKEND CRASH ENCOUNTERED:")
+        traceback.print_exc()
+        return {"analysis": f"START_ANALYSIS\nBackend Runtime Error: {str(e)}\nEND_OUTPUT"}

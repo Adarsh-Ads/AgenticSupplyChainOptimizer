@@ -1,17 +1,20 @@
 # --- Agentic Framework & LLM ---
 agno[groq]
 openai             
-python-dotenv      
+python-dotenv       
 
 # --- Data Science & Forecasting ---
-pandas              
-xgboost             
+pandas               
+xgboost              
 scikit-learn        
+plotly
 
 # --- Backend & API ---
-fastapi           
-uvicorn            
-httpx     
+fastapi            
+uvicorn             
+httpx 
+requests    
 
+# --- Frontend ---
 streamlit
 watchdog
