@@ -1,5 +1,7 @@
 # 📦 Agentic Supply Chain Control Tower & Optimizer
 
+![SCM Control Tower Demo Dashboard](images/dashboard_demo.png)
+
 A decoupled, intelligent microservice application that combines predictive data modeling with LLM reasoning agents to monitor inventory runaways, execute supply chain risk forecasting, and automate supplier procurement cycles.
 
 ## 🏗️ Architectural Infrastructure Overview
