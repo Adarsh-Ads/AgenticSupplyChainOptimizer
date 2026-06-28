@@ -8,6 +8,7 @@ from src.engine import forecast_stock_risk
 load_dotenv()
 DB_PATH = os.getenv("DB_PATH", "data/inventory.db")
 
+# Decoupled Gateway Interface: Acts as the primary orchestrator service layer
 app = FastAPI(title="Agentic SCM API Gateway")
 
 class AnalysisPayload(BaseModel):
@@ -16,6 +17,7 @@ class AnalysisPayload(BaseModel):
 
 @app.get("/inventory")
 def get_inventory():
+    """Fetches real-time status vectors from the internal relational schemas."""
     if not os.path.exists(DB_PATH):
         raise HTTPException(status_code=404, detail="Database missing. Initialize database.py first.")
     
@@ -32,6 +34,7 @@ def get_inventory():
 
 @app.post("/trigger/{product_id}")
 def trigger_analysis(product_id: str, payload: AnalysisPayload):
+    """Triggers the downstream inference pipeline execution path."""
     try:
         result = forecast_stock_risk(
             product_id=product_id, 

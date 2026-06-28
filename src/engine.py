@@ -19,41 +19,45 @@ def forecast_stock_risk(product_id: str, est_days_left: float, target_days: floa
         if not product:
             return {"analysis": "START_ANALYSIS\nError: Product not found.\nEND_OUTPUT"}
 
+        # Linear projection math confirming baseline procurement shortfalls
         units_needed = max(0, (target_days - est_days_left) * 50)
 
-        # Pre-fetch the supplier information programmatically
-        supplier_info = get_supplier_details(product_id)
-        if isinstance(supplier_info, dict):
-            supplier_name = supplier_info.get("supplier_name", "General Supplier")
-            supplier_email = supplier_info.get("supplier_email", "orders@supply-chain.com")
-        else:
-            supplier_name = "General Supplier"
-            supplier_email = "orders@supply-chain.com"
+        base_instructions = [
+            "You are a strict data formatting script. You must output exactly according to the template markers.",
+            "Do not include conversational introductions, conclusions, or markdown code blocks around the markers.",
+            "",
+            "START_ANALYSIS",
+            f"To reach your {target_days:.1f}-day buffer, an order of {units_needed:.0f} units is required.",
+        ]
 
-        if not os.getenv("GROQ_API_KEY"):
-            print("❌ CRITICAL ERROR: GROQ_API_KEY is missing from environment variables.")
-            return {"analysis": "START_ANALYSIS\nConfiguration Error: Backend API Key is missing.\nEND_OUTPUT"}
+        # DETERMINISTIC GUARDRAILS: Programmatic switch checks the threshold before passing context to the LLM.
+        # This approach eliminates structural hallucination loops if procurement is not required.
+        if units_needed > 0:
+            supplier_info = get_supplier_details(product_id)
+            if isinstance(supplier_info, dict):
+                supplier_name = supplier_info.get("supplier_name", "General Supplier")
+                supplier_email = supplier_info.get("supplier_email", "orders@supply-chain.com")
+            else:
+                supplier_name = "General Supplier"
+                supplier_email = "orders@supply-chain.com"
 
-        # FIXED: temperature goes inside Groq(), NOT Agent()
-        agent = Agent(
-            model=Groq(id="llama-3.3-70b-versatile", temperature=0.0),
-            instructions=[
-                "You are a strict data formatting script. You must output exactly according to the template markers.",
-                "Do not include conversational introductions, conclusions, or markdown code blocks around the markers.",
+            base_instructions.extend([
                 "",
-                "START_ANALYSIS",
-                f"To reach your {target_days:.1f}-day buffer, an order of {units_needed:.0f} units is required.",
-                "",
-                f"If the order volume ({units_needed:.0f}) is greater than 0, append this exact block next:",
                 "START_EMAIL",
                 f"Subject: Immediate Procurement Order Request - {product_id}",
                 f"Dear {supplier_name},",
                 f"Please process an immediate warehouse dispatch order for {units_needed:.0f} units of Product ID: {product_id}.",
                 f"Kindly confirm receipt and dispatch configurations to {supplier_email}.",
                 "Best Regards,",
-                "Automated Procurement Engine",
-                "END_OUTPUT"
-            ]
+                "Automated Procurement Engine"
+            ])
+        
+        base_instructions.append("\nEND_OUTPUT")
+
+        # Zero-temperature configuration prevents token divergence and enforces strict protocol formatting compliance
+        agent = Agent(
+            model=Groq(id="llama-3.3-70b-versatile", temperature=0.0),
+            instructions=base_instructions
         )
 
         response = agent.run(f"Process schema for {product_id}")

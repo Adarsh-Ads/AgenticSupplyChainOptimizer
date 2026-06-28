@@ -3,11 +3,13 @@ import os
 from dotenv import load_dotenv
 
 load_dotenv()
-# Reference the DB path relative to the project root directory
 DB_PATH = os.getenv("DB_PATH", "data/inventory.db")
 
 def get_supplier_details(product_id: str):
-    """Fetches the supplier name and email for a given product ID from the SQL database."""
+    """
+    Data Extraction Layer: Performs an atomic SQL join operation to map 
+    relational database attributes (Suppliers -> Products) for downstream agent injection.
+    """
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
@@ -25,7 +27,10 @@ def get_supplier_details(product_id: str):
     return "Supplier not found."
 
 def update_inventory_status(product_id: str, status: str):
-    """Logs the agent's action in a text file for the dashboard to read."""
+    """
+    Audit Logging Utility: Writes deterministic agent actions to persistent storage, 
+    ensuring observability across the system's runtime operations.
+    """
     os.makedirs("data", exist_ok=True)
     with open("data/agent_log.txt", "a") as f:
         f.write(f"Product {product_id}: {status}\n")
