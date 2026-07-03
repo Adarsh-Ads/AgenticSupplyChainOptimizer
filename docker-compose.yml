@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  # --- BACKEND MICROSERVICE CONTAINER ---
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data  # Persists the SQLite file on your local machine so data isn't lost on restart
+
+  # --- FRONTEND PRESENTATION CONTAINER ---
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "8501:8501"
+    environment:
+      - API_URL=http://backend:8000  # Replaces 'localhost' with the container service name in Docker's internal DNS
+    volumes:
+      - .:/app  # 🔄 Dynamic link: Changes in VS Code instantly update inside the container!
+    depends_on:
+      - backend  # Ensures the backend completely initializes before launching the dashboard

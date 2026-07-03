@@ -1,0 +1,35 @@
+# Use a lightweight, secure Python runtime base image
+FROM python:3.11-slim as builder
+
+# Set directory layout constraints inside the container network
+WORKDIR /app
+
+# Prevent Python from writing .pyc files and force unbuffered logging streams
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# Install system dependencies required for compiling wheels if necessary
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy only requirements first to leverage Docker's caching mechanism
+COPY requirements.txt .
+RUN pip install --no-cache-dir --user -r requirements.txt
+
+# Final minimal runtime stage to reduce final image size significantly
+FROM python:3.11-slim as runner
+WORKDIR /app
+
+# Copy installed dependencies from the builder layer
+COPY --from=builder /root/.local /root/.local
+COPY . .
+
+# Update environmental PATH to recognize user-installed bin profiles
+ENV PATH=/root/.local/bin:$PATH
+
+# Expose FastAPI's standard network port gateway
+EXPOSE 8000
+
+# Command to launch the ASGI web server interface safely
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]

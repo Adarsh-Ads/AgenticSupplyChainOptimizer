@@ -1,0 +1,22 @@
+FROM python:3.11-slim as builder
+WORKDIR /app
+
+ENV PYTHONTONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir --user -r requirements.txt
+
+FROM python:3.11-slim as runner
+WORKDIR /app
+
+COPY --from=builder /root/.local /root/.local
+COPY . .
+
+ENV PATH=/root/.local/bin:$PATH
+
+# Expose Streamlit's standard viewing viewport port
+EXPOSE 8501
+
+# Command to launch the Streamlit server bound to container network paths
+CMD ["streamlit", "run", "src/dashboard.py", "--server.port=8501", "--server.address=0.0.0.0"]

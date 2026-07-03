@@ -3,10 +3,13 @@
 
 # Environments
 venv/
+.venv/
 __pycache__/
 *.pyc
 
 # Data & Databases
+data/*
+!data/.gitkeep
 data/inventory.db
 data/agent_log.txt
 
