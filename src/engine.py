@@ -56,7 +56,7 @@ def forecast_stock_risk(product_id: str, est_days_left: float, target_days: floa
 
         # Zero-temperature configuration prevents token divergence and enforces strict protocol formatting compliance
         agent = Agent(
-            model=Groq(id="llama-3.3-70b-versatile", temperature=0.0),
+            model=Groq(id="openai/gpt-oss-120b", temperature=0.0),
             instructions=base_instructions
         )
 

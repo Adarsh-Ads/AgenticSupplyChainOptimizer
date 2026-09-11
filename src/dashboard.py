@@ -22,7 +22,11 @@ try:
     inventory_res = requests.get(f"{API_URL}/inventory")
     inventory_res.raise_for_status() 
     df = pd.DataFrame(inventory_res.json())
-    
+
+    if df.empty:
+        st.info("📭 No products found in inventory. Upload a CSV to data/retail_data.csv and restart.")
+        st.stop()
+
     # Simple feature engineering: derive stock runway based on historic daily velocity
     df['est_days_left'] = df['current_stock'] / 50 
 
